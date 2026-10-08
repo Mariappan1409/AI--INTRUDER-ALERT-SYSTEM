@@ -1,0 +1,1456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>ESP32 AI Intruder Detection</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        :root {
+            --bg: #080b12;
+            --panel: #0e131d;
+            --panel-2: #121925;
+            --border: rgba(255,255,255,0.08);
+            --text: #f8fafc;
+            --muted: #8993a4;
+            --primary: #4f8cff;
+            --primary-dark: #2563eb;
+            --green: #22c55e;
+            --red: #ef4444;
+            --orange: #f59e0b;
+        }
+
+        body {
+            min-height: 100vh;
+            background:
+                radial-gradient(circle at 80% 0%, rgba(37,99,235,.12), transparent 30%),
+                radial-gradient(circle at 0% 100%, rgba(14,165,233,.08), transparent 30%),
+                var(--bg);
+            color: var(--text);
+            font-family:
+                Inter,
+                ui-sans-serif,
+                system-ui,
+                -apple-system,
+                BlinkMacSystemFont,
+                "Segoe UI",
+                sans-serif;
+            overflow-x: hidden;
+        }
+
+        /* ================= HEADER ================= */
+
+        header {
+            height: 72px;
+            padding: 0 28px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--border);
+            background: rgba(8,11,18,.88);
+            backdrop-filter: blur(18px);
+            position: sticky;
+            top: 0;
+            z-index: 20;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 13px;
+        }
+
+        .brand-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 11px;
+            display: grid;
+            place-items: center;
+            background: linear-gradient(135deg, #2563eb, #4f46e5);
+            box-shadow: 0 8px 25px rgba(37,99,235,.28);
+            font-size: 20px;
+        }
+
+        .brand h1 {
+            font-size: 17px;
+            font-weight: 700;
+            letter-spacing: -.3px;
+        }
+
+        .brand p {
+            color: var(--muted);
+            font-size: 11px;
+            margin-top: 2px;
+        }
+
+        .system-status {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            color: #cbd5e1;
+            font-size: 13px;
+        }
+
+        .status-dot {
+            width: 9px;
+            height: 9px;
+            background: var(--green);
+            border-radius: 50%;
+            box-shadow: 0 0 12px rgba(34,197,94,.8);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%,100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: .45;
+            }
+        }
+
+        /* ================= LAYOUT ================= */
+
+        .layout {
+            display: grid;
+            grid-template-columns: 250px minmax(0, 1fr);
+            min-height: calc(100vh - 72px);
+        }
+
+        /* ================= SIDEBAR ================= */
+
+        aside {
+            padding: 24px 16px;
+            background: rgba(14,19,29,.72);
+            border-right: 1px solid var(--border);
+        }
+
+        .section-label {
+            color: #687386;
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1.4px;
+            padding: 0 12px;
+            margin-bottom: 10px;
+        }
+
+        .nav {
+            display: flex;
+            flex-direction: column;
+            gap: 7px;
+        }
+
+        .nav-btn {
+            width: 100%;
+            border: 1px solid transparent;
+            background: transparent;
+            color: #aeb8c8;
+            padding: 13px 13px;
+            border-radius: 10px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            text-align: left;
+            font-size: 13px;
+            font-weight: 600;
+            transition: .2s ease;
+        }
+
+        .nav-btn:hover {
+            background: rgba(255,255,255,.04);
+            color: white;
+        }
+
+        .nav-btn.active {
+            background: rgba(37,99,235,.14);
+            color: #fff;
+            border-color: rgba(79,140,255,.2);
+        }
+
+        .nav-icon {
+            width: 31px;
+            height: 31px;
+            display: grid;
+            place-items: center;
+            border-radius: 8px;
+            background: rgba(255,255,255,.05);
+            font-size: 15px;
+        }
+
+        .nav-btn.active .nav-icon {
+            background: rgba(79,140,255,.2);
+        }
+
+        .sidebar-card {
+            margin-top: 30px;
+            padding: 15px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            background: rgba(255,255,255,.025);
+        }
+
+        .sidebar-card-title {
+            font-size: 12px;
+            font-weight: 700;
+            margin-bottom: 12px;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            padding: 7px 0;
+            color: var(--muted);
+            border-bottom: 1px solid rgba(255,255,255,.05);
+        }
+
+        .info-row:last-child {
+            border-bottom: 0;
+        }
+
+        .info-value {
+            color: #e2e8f0;
+            font-weight: 600;
+        }
+
+        /* ================= MAIN ================= */
+
+        main {
+            min-width: 0;
+            padding: 25px;
+        }
+
+        .page-heading {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 22px;
+            gap: 20px;
+        }
+
+        .page-heading h2 {
+            font-size: 23px;
+            letter-spacing: -.5px;
+        }
+
+        .page-heading p {
+            color: var(--muted);
+            font-size: 13px;
+            margin-top: 5px;
+        }
+
+        .mode-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            border-radius: 20px;
+            border: 1px solid var(--border);
+            background: rgba(255,255,255,.035);
+            color: #dbe4f0;
+            font-size: 11px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .mode-badge span {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: var(--primary);
+        }
+
+        /* ================= CAMERA ================= */
+
+        .camera-card {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 18px 50px rgba(0,0,0,.22);
+        }
+
+        .camera-header {
+            min-height: 54px;
+            padding: 0 17px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .camera-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .live-pill {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 10px;
+            color: #fca5a5;
+            text-transform: uppercase;
+            letter-spacing: .8px;
+        }
+
+        .live-pill::before {
+            content: "";
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--red);
+            box-shadow: 0 0 8px rgba(239,68,68,.7);
+        }
+
+        .camera-wrapper {
+            position: relative;
+            width: 100%;
+            min-height: 420px;
+            background: #020408;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        #videoFeed {
+            width: 100%;
+            height: auto;
+            max-height: 72vh;
+            min-height: 420px;
+            object-fit: contain;
+            display: block;
+            background: #020408;
+        }
+
+        .camera-overlay {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+        }
+
+        .corner {
+            position: absolute;
+            width: 26px;
+            height: 26px;
+            border-color: rgba(79,140,255,.8);
+            border-style: solid;
+        }
+
+        .corner.tl {
+            top: 18px;
+            left: 18px;
+            border-width: 2px 0 0 2px;
+        }
+
+        .corner.tr {
+            top: 18px;
+            right: 18px;
+            border-width: 2px 2px 0 0;
+        }
+
+        .corner.bl {
+            bottom: 18px;
+            left: 18px;
+            border-width: 0 0 2px 2px;
+        }
+
+        .corner.br {
+            bottom: 18px;
+            right: 18px;
+            border-width: 0 2px 2px 0;
+        }
+
+        .camera-label {
+            position: absolute;
+            top: 17px;
+            left: 17px;
+            padding: 6px 9px;
+            border-radius: 6px;
+            background: rgba(0,0,0,.55);
+            backdrop-filter: blur(8px);
+            font-size: 10px;
+            color: #cbd5e1;
+        }
+
+        .camera-time {
+            position: absolute;
+            right: 17px;
+            bottom: 17px;
+            padding: 6px 9px;
+            border-radius: 6px;
+            background: rgba(0,0,0,.55);
+            backdrop-filter: blur(8px);
+            font-size: 10px;
+            color: #cbd5e1;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .camera-footer {
+            min-height: 54px;
+            padding: 10px 17px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-top: 1px solid var(--border);
+        }
+
+        .camera-info {
+            display: flex;
+            gap: 18px;
+            color: var(--muted);
+            font-size: 11px;
+        }
+
+        .camera-info strong {
+            color: #dbe4f0;
+        }
+
+        .connection {
+            color: #86efac;
+            font-size: 11px;
+            display: flex;
+            gap: 6px;
+            align-items: center;
+        }
+
+        .connection::before {
+            content: "";
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--green);
+        }
+
+        /* ================= STATS ================= */
+
+        .stats {
+            margin-top: 18px;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 14px;
+        }
+
+        .stat-card {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 13px;
+            padding: 16px;
+        }
+
+        .stat-top {
+            display: flex;
+            justify-content: space-between;
+            color: var(--muted);
+            font-size: 11px;
+        }
+
+        .stat-icon {
+            width: 29px;
+            height: 29px;
+            display: grid;
+            place-items: center;
+            border-radius: 8px;
+            background: rgba(79,140,255,.1);
+            color: #93c5fd;
+        }
+
+        .stat-number {
+            margin-top: 10px;
+            font-size: 23px;
+            font-weight: 700;
+        }
+
+        .stat-description {
+            margin-top: 3px;
+            font-size: 10px;
+            color: #64748b;
+        }
+
+        /* ================= MODAL ================= */
+
+        .modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,.72);
+            backdrop-filter: blur(8px);
+            z-index: 100;
+            padding: 20px;
+        }
+
+        .modal.show {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-box {
+            width: 100%;
+            max-width: 390px;
+            background: #0d131e;
+            border: 1px solid rgba(255,255,255,.1);
+            border-radius: 16px;
+            padding: 23px;
+            box-shadow: 0 30px 90px rgba(0,0,0,.5);
+            animation: modalIn .18s ease;
+        }
+
+        @keyframes modalIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px) scale(.98);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 21px;
+        }
+
+        .modal-header h3 {
+            font-size: 17px;
+        }
+
+        .close {
+            width: 31px;
+            height: 31px;
+            border: 0;
+            border-radius: 8px;
+            background: rgba(255,255,255,.05);
+            color: #94a3b8;
+            cursor: pointer;
+            font-size: 17px;
+        }
+
+        .close:hover {
+            color: white;
+            background: rgba(255,255,255,.1);
+        }
+
+        label {
+            display: block;
+            color: #aab5c5;
+            font-size: 11px;
+            font-weight: 600;
+            margin-bottom: 7px;
+        }
+
+        .input {
+            width: 100%;
+            height: 44px;
+            border: 1px solid rgba(255,255,255,.1);
+            background: #080c14;
+            color: white;
+            border-radius: 9px;
+            padding: 0 13px;
+            outline: none;
+            font-size: 13px;
+            margin-bottom: 17px;
+        }
+
+        .input:focus {
+            border-color: rgba(79,140,255,.7);
+            box-shadow: 0 0 0 3px rgba(79,140,255,.1);
+        }
+
+        .save-btn {
+            width: 100%;
+            height: 44px;
+            border: 0;
+            border-radius: 9px;
+            background: linear-gradient(135deg,#2563eb,#4f46e5);
+            color: white;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: .2s;
+        }
+
+        .save-btn:hover {
+            filter: brightness(1.12);
+            transform: translateY(-1px);
+        }
+
+        /* ================= TOAST ================= */
+
+        .toast {
+            position: fixed;
+            right: 22px;
+            bottom: 22px;
+            width: min(340px, calc(100vw - 44px));
+            padding: 14px 16px;
+            border-radius: 11px;
+            background: #111827;
+            border: 1px solid rgba(255,255,255,.1);
+            box-shadow: 0 18px 45px rgba(0,0,0,.35);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            transform: translateY(120px);
+            opacity: 0;
+            pointer-events: none;
+            transition: .25s ease;
+            z-index: 200;
+            font-size: 12px;
+        }
+
+        .toast.show {
+            transform: translateY(0);
+            opacity: 1;
+        }
+
+        .toast-icon {
+            width: 27px;
+            height: 27px;
+            display: grid;
+            place-items: center;
+            border-radius: 7px;
+            background: rgba(34,197,94,.12);
+            color: #86efac;
+        }
+
+        /* ================= RESPONSIVE ================= */
+
+        @media (max-width: 850px) {
+            .layout {
+                grid-template-columns: 1fr;
+            }
+
+            aside {
+                border-right: 0;
+                border-bottom: 1px solid var(--border);
+                padding: 12px;
+            }
+
+            .nav {
+                display: grid;
+                grid-template-columns: repeat(3, 1fr);
+            }
+
+            .nav-btn {
+                justify-content: center;
+                flex-direction: column;
+                gap: 5px;
+                text-align: center;
+                padding: 9px 5px;
+            }
+
+            .nav-btn span:last-child {
+                font-size: 10px;
+            }
+
+            .sidebar-card,
+            .section-label {
+                display: none;
+            }
+
+            main {
+                padding: 16px;
+            }
+        }
+
+        @media (max-width: 600px) {
+            header {
+                padding: 0 15px;
+                height: 64px;
+            }
+
+            .brand h1 {
+                font-size: 14px;
+            }
+
+            .system-status {
+                font-size: 10px;
+            }
+
+            .page-heading h2 {
+                font-size: 19px;
+            }
+
+            .stats {
+                grid-template-columns: 1fr;
+            }
+
+            .camera-wrapper,
+            #videoFeed {
+                min-height: 270px;
+            }
+
+            .camera-info {
+                display: none;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+<header>
+    <div class="brand">
+        <div class="brand-icon">🛡️</div>
+
+        <div>
+            <h1>ESP32 AI Security</h1>
+            <p>Intruder Detection System</p>
+        </div>
+    </div>
+
+    <div class="system-status">
+        <span class="status-dot"></span>
+        System Online
+    </div>
+</header>
+
+
+<div class="layout">
+
+    <!-- ================= SIDEBAR ================= -->
+
+    <aside>
+
+        <div class="section-label">Security Controls</div>
+
+        <div class="nav">
+
+            <button class="nav-btn active" id="btn-live"
+                    onclick="setMode('live')">
+
+                <span class="nav-icon">📡</span>
+                <span>Live Monitoring</span>
+
+            </button>
+
+            <button class="nav-btn"
+                    id="btn-add"
+                    onclick="setMode('add')">
+
+                <span class="nav-icon">👤</span>
+                <span>Add Person</span>
+
+            </button>
+
+            <button class="nav-btn"
+                    id="btn-verify"
+                    onclick="setMode('verify')">
+
+                <span class="nav-icon">✓</span>
+                <span>Verify Person</span>
+
+            </button>
+
+        </div>
+
+
+        <div class="sidebar-card">
+
+            <div class="sidebar-card-title">
+                System Information
+            </div>
+
+            <div class="info-row">
+                <span>Camera</span>
+                <span class="info-value">ESP32</span>
+            </div>
+
+            <div class="info-row">
+                <span>AI Engine</span>
+                <span class="info-value">Active</span>
+            </div>
+
+            <div class="info-row">
+                <span>Connection</span>
+                <span class="info-value">Online</span>
+            </div>
+
+            <div class="info-row">
+                <span>Mode</span>
+                <span class="info-value" id="sidebarMode">
+                    Live
+                </span>
+            </div>
+
+        </div>
+
+    </aside>
+
+
+    <!-- ================= MAIN ================= -->
+
+    <main>
+
+        <div class="page-heading">
+
+            <div>
+                <h2>Security Monitor</h2>
+
+                <p>
+                    Real-time ESP32 camera and AI monitoring
+                </p>
+            </div>
+
+            <div class="mode-badge">
+                <span></span>
+                <strong id="currentMode">
+                    LIVE MONITORING
+                </strong>
+            </div>
+
+        </div>
+
+
+        <!-- ================= CAMERA ================= -->
+
+        <section class="camera-card">
+
+            <div class="camera-header">
+
+                <div class="camera-title">
+                    <span>📹</span>
+                    ESP32 Camera Feed
+                </div>
+
+                <div class="live-pill">
+                    Live
+                </div>
+
+            </div>
+
+
+            <div class="camera-wrapper">
+
+                <img
+                    id="videoFeed"
+                    src="/video"
+                    alt="ESP32 Live Camera Feed"
+                >
+
+                <div class="camera-overlay">
+
+                    <div class="corner tl"></div>
+                    <div class="corner tr"></div>
+                    <div class="corner bl"></div>
+                    <div class="corner br"></div>
+
+                    <div class="camera-label">
+                        CAM-01 • AI MONITORING
+                    </div>
+
+                    <div
+                        class="camera-time"
+                        id="clock">
+                        --:--:--
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <div class="camera-footer">
+
+                <div class="camera-info">
+
+                    <span>
+                        Resolution:
+                        <strong>Live</strong>
+                    </span>
+
+                    <span>
+                        Source:
+                        <strong>ESP32</strong>
+                    </span>
+
+                </div>
+
+                <div class="connection">
+                    Camera Connected
+                </div>
+
+            </div>
+
+        </section>
+
+
+        <!-- ================= STATS ================= -->
+
+        <div class="stats">
+
+            <div class="stat-card">
+
+                <div class="stat-top">
+
+                    <span>Detection Engine</span>
+
+                    <div class="stat-icon">
+                        🤖
+                    </div>
+
+                </div>
+
+                <div class="stat-number">
+                    Active
+                </div>
+
+                <div class="stat-description">
+                    AI monitoring is running
+                </div>
+
+            </div>
+
+
+            <div class="stat-card">
+
+                <div class="stat-top">
+
+                    <span>Camera Status</span>
+
+                    <div class="stat-icon">
+                        📷
+                    </div>
+
+                </div>
+
+                <div class="stat-number">
+                    Online
+                </div>
+
+                <div class="stat-description">
+                    ESP32 stream available
+                </div>
+
+            </div>
+
+
+            <div class="stat-card">
+
+                <div class="stat-top">
+
+                    <span>Security Mode</span>
+
+                    <div class="stat-icon">
+                        🛡️
+                    </div>
+
+                </div>
+
+                <div
+                    class="stat-number"
+                    id="securityMode">
+                    Live
+                </div>
+
+                <div class="stat-description">
+                    Current detection operation
+                </div>
+
+            </div>
+
+        </div>
+
+    </main>
+
+</div>
+
+
+<!-- ================= ADD PERSON MODAL ================= -->
+
+<div
+    class="modal"
+    id="modal"
+    onclick="closeModalOutside(event)"
+>
+
+    <div
+        class="modal-box"
+        onclick="event.stopPropagation()"
+    >
+
+        <div class="modal-header">
+
+            <h3>Register Person</h3>
+
+            <button
+                class="close"
+                onclick="closeModal()">
+                ×
+            </button>
+
+        </div>
+
+
+        <form onsubmit="save(event)">
+
+            <label for="name">
+                Person Name
+            </label>
+
+            <input
+                class="input"
+                id="name"
+                type="text"
+                placeholder="Enter person's name"
+                autocomplete="off"
+                required
+            >
+
+            <button
+                class="save-btn"
+                type="submit"
+            >
+                Register Person
+            </button>
+
+        </form>
+
+    </div>
+
+</div>
+
+
+<!-- ================= TOAST ================= -->
+
+<div
+    class="toast"
+    id="toast"
+>
+
+    <div class="toast-icon">
+        ✓
+    </div>
+
+    <div id="toastMessage">
+        Operation completed
+    </div>
+
+</div>
+
+
+<script>
+
+    /* ================= STATE ================= */
+
+    let currentMode = "live";
+
+
+    /* ================= MODE ================= */
+
+    function setMode(mode) {
+
+        currentMode = mode;
+
+        fetch("/set_mode", {
+
+            method: "POST",
+
+            headers: {
+                "Content-Type": "application/json"
+            },
+
+            body: JSON.stringify({
+                mode: mode
+            })
+
+        })
+        .then(response => {
+
+            if (!response.ok) {
+                throw new Error("Unable to change mode");
+            }
+
+            return response.text();
+
+        })
+        .then(() => {
+
+            updateInterface(mode);
+
+        })
+        .catch(error => {
+
+            console.error(error);
+
+            showToast(
+                "Unable to communicate with the server"
+            );
+
+        });
+
+
+        if (mode === "add") {
+
+            openModal();
+
+        } else {
+
+            closeModal();
+
+        }
+
+    }
+
+
+    /* ================= UI UPDATE ================= */
+
+    function updateInterface(mode) {
+
+        document
+            .querySelectorAll(".nav-btn")
+            .forEach(btn => {
+                btn.classList.remove("active");
+            });
+
+
+        if (mode === "live") {
+
+            document
+                .getElementById("btn-live")
+                .classList.add("active");
+
+        }
+
+        if (mode === "add") {
+
+            document
+                .getElementById("btn-add")
+                .classList.add("active");
+
+        }
+
+        if (mode === "verify") {
+
+            document
+                .getElementById("btn-verify")
+                .classList.add("active");
+
+        }
+
+
+        const names = {
+
+            live: "LIVE MONITORING",
+
+            add: "ADD PERSON",
+
+            verify: "VERIFY PERSON"
+
+        };
+
+
+        const shortNames = {
+
+            live: "Live",
+
+            add: "Add Person",
+
+            verify: "Verify"
+
+        };
+
+
+        document
+            .getElementById("currentMode")
+            .textContent = names[mode];
+
+
+        document
+            .getElementById("securityMode")
+            .textContent = shortNames[mode];
+
+
+        document
+            .getElementById("sidebarMode")
+            .textContent = shortNames[mode];
+
+    }
+
+
+    /* ================= MODAL ================= */
+
+    function openModal() {
+
+        document
+            .getElementById("modal")
+            .classList.add("show");
+
+        setTimeout(() => {
+
+            document
+                .getElementById("name")
+                .focus();
+
+        }, 100);
+
+    }
+
+
+    function closeModal() {
+
+        document
+            .getElementById("modal")
+            .classList.remove("show");
+
+    }
+
+
+    function closeModalOutside(event) {
+
+        if (event.target.id === "modal") {
+
+            closeModal();
+
+            setModeWithoutModal("live");
+
+        }
+
+    }
+
+
+    function setModeWithoutModal(mode) {
+
+        currentMode = mode;
+
+        fetch("/set_mode", {
+
+            method: "POST",
+
+            headers: {
+                "Content-Type": "application/json"
+            },
+
+            body: JSON.stringify({
+                mode: mode
+            })
+
+        }).catch(console.error);
+
+        updateInterface(mode);
+
+    }
+
+
+    /* ================= SAVE PERSON ================= */
+
+    function save(event) {
+
+        event.preventDefault();
+
+
+        const nameInput =
+            document.getElementById("name");
+
+        const name =
+            nameInput.value.trim();
+
+
+        if (!name) {
+
+            showToast(
+                "Please enter a person's name"
+            );
+
+            return;
+
+        }
+
+
+        const formData =
+            new FormData();
+
+        formData.append(
+            "name",
+            name
+        );
+
+
+        const button =
+            document.querySelector(".save-btn");
+
+        button.disabled = true;
+
+        button.textContent =
+            "Registering...";
+
+
+        fetch("/add_person", {
+
+            method: "POST",
+
+            body: formData
+
+        })
+
+        .then(response => {
+
+            if (!response.ok) {
+                throw new Error(
+                    "Registration failed"
+                );
+            }
+
+            return response.text();
+
+        })
+
+        .then(message => {
+
+            showToast(
+                message || "Person registered successfully"
+            );
+
+            nameInput.value = "";
+
+            closeModal();
+
+            setModeWithoutModal("live");
+
+        })
+
+        .catch(error => {
+
+            console.error(error);
+
+            showToast(
+                "Failed to register person"
+            );
+
+        })
+
+        .finally(() => {
+
+            button.disabled = false;
+
+            button.textContent =
+                "Register Person";
+
+        });
+
+    }
+
+
+    /* ================= TOAST ================= */
+
+    let toastTimer;
+
+
+    function showToast(message) {
+
+        const toast =
+            document.getElementById("toast");
+
+        const text =
+            document.getElementById("toastMessage");
+
+
+        text.textContent = message;
+
+        toast.classList.add("show");
+
+
+        clearTimeout(toastTimer);
+
+
+        toastTimer = setTimeout(() => {
+
+            toast.classList.remove("show");
+
+        }, 3000);
+
+    }
+
+
+    /* ================= CLOCK ================= */
+
+    function updateClock() {
+
+        const now = new Date();
+
+        const time =
+            now.toLocaleTimeString(
+                "en-IN",
+                {
+                    hour12: false
+                }
+            );
+
+
+        document
+            .getElementById("clock")
+            .textContent = time;
+
+    }
+
+
+    setInterval(
+        updateClock,
+        1000
+    );
+
+    updateClock();
+
+
+    /* ================= VIDEO ERROR ================= */
+
+    const video =
+        document.getElementById("videoFeed");
+
+
+    video.addEventListener(
+        "error",
+        () => {
+
+            showToast(
+                "Camera stream disconnected"
+            );
+
+        }
+    );
+
+
+    /* ================= ESC ================= */
+
+    document.addEventListener(
+        "keydown",
+        event => {
+
+            if (
+                event.key === "Escape" &&
+                document
+                    .getElementById("modal")
+                    .classList.contains("show")
+            ) {
+
+                closeModal();
+
+                setModeWithoutModal("live");
+
+            }
+
+        }
+    );
+
+</script>
+
+</body>
+</html>
